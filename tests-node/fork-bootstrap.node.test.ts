@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildForkWrangler, classifyForkResources, deploymentId, deploymentResourceNames, parseCreatedD1Id, parseD1Databases, parseQueueNames, parseR2BucketNames } from "../scripts/lib/fork-bootstrap.mjs";
-import { assertRollbackCheckpoint, buildRollbackCheckpoint, parseActiveDeploymentVersion, parseTimeTravelBookmark } from "../scripts/lib/fork-release.mjs";
+import { assertRollbackCheckpoint, buildRollbackCheckpoint, isMissingWorkerError, parseActiveDeploymentVersion, parseTimeTravelBookmark } from "../scripts/lib/fork-release.mjs";
 import { assertSchemaTransition, validateForkMigrationManifest } from "../scripts/lib/fork-migrations.mjs";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -37,11 +37,19 @@ describe("bootstrap fork-first", () => {
       release: { version: "1.2.3-rc.1", commit: "abc123", schemaVersion: "7", channel: "rc" },
     });
     const parsed = JSON.parse(source);
-    expect(parsed.name).toBe("smartzap-12ab34cd-staging");
+    expect(parsed.name).toBe("smartzap-12ab34cd");
     expect(parsed.d1_databases[0]).toEqual(expect.objectContaining({ database_name: "smartzap-12ab34cd-staging-db", database_id: expect.any(String) }));
     expect(parsed.r2_buckets[0].bucket_name).toBe("smartzap-12ab34cd-staging-media");
     expect(parsed.workflows.map((item: { name: string }) => item.name)).toEqual(["smartzap-12ab34cd-staging-campaign-send", "smartzap-12ab34cd-staging-setup-health"]);
     expect(parsed.vars).toEqual(expect.objectContaining({ ENVIRONMENT: "staging", SMARTZAP_VERSION: "1.2.3-rc.1", SMARTZAP_COMMIT: "abc123", SMARTZAP_SCHEMA_VERSION: "7" }));
+    expect(parsed.env.staging).toEqual(expect.objectContaining({
+      d1_databases: parsed.d1_databases,
+      r2_buckets: parsed.r2_buckets,
+      queues: parsed.queues,
+      workflows: parsed.workflows,
+      vars: parsed.vars,
+    }));
+    expect(parsed.env.staging.name).toBeUndefined();
   });
 
   it("lê respostas D1 sem depender de IDs fixos", () => {
@@ -82,6 +90,16 @@ describe("bootstrap fork-first", () => {
     expect(assertRollbackCheckpoint(checkpoint, "smartzap-12ab34cd")).toEqual(expect.objectContaining({ bookmark, versionId }));
     expect(JSON.stringify(checkpoint)).not.toMatch(/password|vault|token/i);
     expect(() => assertRollbackCheckpoint(checkpoint, "smartzap-deadbeef")).toThrow(/não pertence/);
+  });
+
+  it("distingue uma instalação retomável sem Worker de falhas reais da Cloudflare", () => {
+    expect(isMissingWorkerError({
+      stderr: "Worker does not exist [code: 10007]",
+      message: "Command failed: wrangler deployments list",
+    })).toBe(true);
+    expect(isMissingWorkerError({ stderr: "Worker does not exist" })).toBe(false);
+    expect(isMissingWorkerError({ stderr: "Authentication error [code: 10000]" })).toBe(false);
+    expect(isMissingWorkerError(new Error("network timeout"))).toBe(false);
   });
 
   it("valida a cadeia real de migration e bloqueia checksum divergente antes do deploy", () => {

@@ -29,14 +29,35 @@ describe("política fail-closed do Workers Builds", () => {
   it("falha fechada quando a Cloudflare não informa a branch", () => {
     expect(() => classifyWorkersBuildBranch("")).toThrow(/WORKERS_CI_BRANCH ausente/);
   });
+
+  it("neutraliza o override de nome do Workers Builds e exige a identidade pós-deploy", () => {
+    const deploy = readFileSync(resolve("scripts/fork-deploy.mjs"), "utf8");
+    expect(deploy).toContain("buildWranglerChildEnvironment");
+    expect(deploy).toContain('"--name", workerName');
+    expect(deploy).toContain("WRANGLER_OUTPUT_FILE_PATH");
+    expect(deploy).toContain("assertWranglerDeployIdentity");
+  });
 });
 
 describe("corpo auditável do PR de atualização", () => {
-  it("verifica a tag somente com a âncora de confiança já aprovada no fork", () => {
+  it("congela a âncora aprovada no fork antes de buscar a atualização", () => {
     const workflow = readFileSync(resolve(".github/workflows/upstream-sync.yml"), "utf8");
-    expect(workflow).toContain("test -s release/allowed_signers");
-    expect(workflow).toMatch(/allowedSignersFile=release\/allowed_signers/);
+    expect(workflow).toContain('cp release/allowed_signers "$allowed_signers"');
+    expect(workflow).toMatch(/allowedSignersFile="\$allowed_signers"/);
     expect(workflow).not.toContain('git show "${VERSION}:release/allowed_signers"');
+    expect(workflow.indexOf('cp release/allowed_signers "$allowed_signers"')).toBeLessThan(
+      workflow.indexOf('git fetch --no-tags upstream'),
+    );
+  });
+
+  it("abre PR cruzado da branch oficial sem tentar reescrever workflows no fork", () => {
+    const workflow = readFileSync(resolve(".github/workflows/upstream-sync.yml"), "utf8");
+    expect(workflow).toContain('branch="release/${VERSION}"');
+    expect(workflow).toContain('git ls-remote upstream "refs/heads/${branch}"');
+    expect(workflow).toContain('test "$remote_sha" = "$candidate_sha"');
+    expect(workflow).toContain('SMARTZAP_UPDATE_HEAD=${UPSTREAM_OWNER}:${branch}');
+    expect(workflow).toContain('--head "$SMARTZAP_UPDATE_HEAD"');
+    expect(workflow).not.toMatch(/git push.*origin.*sync\//);
   });
 
   it("detecta stable diariamente, aceita tag manual e nunca publica no workflow", () => {

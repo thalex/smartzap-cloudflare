@@ -5,6 +5,77 @@ versionamento segue SemVer.
 
 ## [Unreleased]
 
+## [1.0.0-rc.29] - 2026-08-13
+
+### Corrigido
+
+- modela o canário físico como Wrangler Environment oficial do Worker-base e
+  publica com `--env staging`, conforme a restrição de nome do Workers Builds;
+- mantém D1, R2, Queues, Workflows e variáveis integralmente isolados no bloco
+  `env.staging`, enquanto valida o Worker final `smartzap-<id>-staging`;
+- evita qualquer tentativa de publicar um nome arbitrário a partir do projeto
+  Cloudflare conectado ao Worker de produção.
+
+## [1.0.0-rc.28] - 2026-08-13
+
+### Corrigido
+
+- retoma com segurança uma instalação inicial interrompida quando o D1 já
+  existe, mas o Worker isolado ainda não foi criado;
+- aceita exclusivamente `Worker does not exist [code: 10007]` como ausência de
+  runtime anterior, mantendo qualquer outra falha como bloqueante;
+- evita criar bookmark ou checkpoint D1 quando não existe versão anterior do
+  Worker e neutraliza também no rollback o override de nome do Workers Builds.
+
+## [1.0.0-rc.27] - 2026-08-13
+
+### Segurança
+
+- neutraliza `WRANGLER_CI_OVERRIDE_NAME`, variável injetada pelo Workers Builds
+  que podia substituir o nome isolado de staging pelo nome do Worker conectado;
+- passa `--name` explicitamente ao Wrangler e exige a confirmação estruturada
+  pós-deploy do nome, da versão e do destino exatos antes de aceitar a publicação.
+
+### Operação
+
+- a `rc.26` foi reprovada no canário físico porque o staging foi publicado
+  temporariamente sobre o Worker conectado; produção recebeu rollback imediato
+  para a `rc.24` e a proposta da `rc.26` não será integrada;
+- a `rc.27` só pode avançar após criar um Worker físico de staging separado e
+  comprovar que a versão ativa de produção não mudou.
+
+## [1.0.0-rc.26] - 2026-08-13
+
+### Corrigido
+
+- o atualizador deixa de tentar enviar arquivos de workflow com o token padrão
+  do GitHub Actions, operação recusada pelo GitHub por exigir permissão
+  específica de `Workflows` que o `GITHUB_TOKEN` não concede;
+- cada release publica uma branch oficial `release/vX.Y.Z`, obrigatoriamente no
+  mesmo SHA da tag assinada, e o fork abre um PR cruzado a partir dessa branch;
+- o cliente continua sem PAT, sem GitHub App adicional, sem merge automático e
+  sem qualquer publicação acionada pelo workflow de proposta.
+
+### Operação
+
+- a `rc.26` não altera runtime nem schema D1; ela substitui o transporte da
+  proposta de atualização após a `rc.25` reprovar com segurança no canário real.
+
+## [1.0.0-rc.25] - 2026-08-13
+
+### Segurança
+
+- o workflow congela a âncora de confiança já aprovada no fork em um arquivo
+  temporário antes de buscar a tag candidata, tornando explícito que nenhuma
+  chave entregue pela atualização participa da verificação da própria tag;
+- o contrato automatizado comprova a ordem `copiar âncora -> buscar tag ->
+  verificar assinatura` e recusa regressão para âncora extraída da candidata.
+
+### Operação
+
+- a `rc.25` não altera runtime, dependências de produção nem schema D1 da
+  `rc.24`; ela endurece e torna auditável o mecanismo de proposta de atualização.
+
 ## [1.0.0-rc.24] - 2026-08-12
 
 ### Segurança
